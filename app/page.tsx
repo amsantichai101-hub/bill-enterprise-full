@@ -30,7 +30,7 @@ export default function HomePage() {
         </div>
         <div className="hero home-card">
           <div>
-            <h3>Snapshot + Normalized ตัวอย่าง</h3>
+            <h3>Snapshot + Normalized ตัวอย่าง </h3>
             <p>เก็บทั้ง JSON snapshot และ tables แยก people/items/participants เพื่อ query สะดวก</p>
           </div>
         </div>
