@@ -1,6 +1,7 @@
 export type Category = 'food' | 'drink' | 'mixer' | 'shared' | 'personal';
 export type SplitMode = 'all' | 'selected' | 'owner' | 'weighted-tier' | 'none';
 export type DrinkTier = 'none' | 'low' | 'mid' | 'high' | 'heavy';
+export type BillStatus = 'draft' | 'calculated' | 'sent' | 'pending' | 'paid';
 
 export interface Person {
   id: string;
@@ -35,9 +36,14 @@ export interface BillState {
   id?: string;
   name: string;
   eventDate?: string;
+  ownerName?: string;
+  promptPayNumber?: string; // เพิ่มฟิลด์พร้อมเพย์
+  status?: BillStatus;
+  
   people: Person[];
   items: Item[];
   settings: AppSettings;
+  attachedImage?: string;
 }
 
 export interface PersonBreakdown {

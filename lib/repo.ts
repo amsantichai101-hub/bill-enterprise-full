@@ -4,14 +4,10 @@ import { supabase } from '@/lib/supabase';
 export async function getBills() {
   return supabase
     .from('bills')
-    .select('id, name, event_date, created_at, data')
+    .select('id, name, event_date, created_at, data, owner_name, status, promptpay_number')
     .order('created_at', { ascending: false });
 }
 
-/**
- * ดึง bill detail แบบไม่พึ่ง relational join
- * เพื่อเลี่ยง schema cache / relationship issue ของ Supabase
- */
 export async function getBillDetail(id: string) {
   const billRes = await supabase
     .from('bills')
@@ -42,7 +38,6 @@ export async function getBillDetail(id: string) {
   const items = itemsRes.data || [];
   const participants = participantsRes.data || [];
 
-  // map people db -> ui state
   const mappedPeople = people.map((p: any) => ({
     id: p.legacy_id || p.id,
     name: p.name,
@@ -51,12 +46,10 @@ export async function getBillDetail(id: string) {
     note: p.note || '',
   }));
 
-  // person db id -> legacy/ui id
   const personDbIdToLegacyId = Object.fromEntries(
     people.map((p: any) => [p.id, p.legacy_id || p.id])
   );
 
-  // group participants by item db id
   const participantMap = participants.reduce((acc: Record<string, string[]>, row: any) => {
     const personLegacyId = personDbIdToLegacyId[row.person_id];
     if (!personLegacyId) return acc;
@@ -84,7 +77,6 @@ export async function getBillDetail(id: string) {
     note: item.note || '',
   }));
 
-  // ถ้ามี snapshot data เก็บไว้ใน bills.data ให้เอามาใช้ก่อน
   const snapshot = billRes.data.data;
 
   const finalState: BillState = snapshot
@@ -109,7 +101,10 @@ export async function getBillDetail(id: string) {
         },
       };
 
-  // ถ้า snapshot ไม่มี people/items ให้ fallback จาก normalized tables
+  if (!finalState.ownerName) finalState.ownerName = billRes.data.owner_name || '';
+  if (!finalState.status) finalState.status = billRes.data.status || 'draft';
+  if (!finalState.promptPayNumber) finalState.promptPayNumber = billRes.data.promptpay_number || '';
+
   if (!finalState.people || finalState.people.length === 0) {
     finalState.people = mappedPeople;
   }
@@ -128,6 +123,9 @@ export async function saveBill(state: BillState) {
   const billPayload = {
     name: state.name,
     event_date: state.eventDate || new Date().toISOString().slice(0, 10),
+    owner_name: state.ownerName || null,
+    status: state.status || 'draft',
+    promptpay_number: state.promptPayNumber || null,
     data: state,
   };
 
@@ -141,7 +139,6 @@ export async function saveBill(state: BillState) {
 
     if (error) throw error;
 
-    // ล้างลูกก่อน re-insert
     await supabase.from('bill_item_participants').delete().eq('bill_id', billId);
     await supabase.from('bill_items').delete().eq('bill_id', billId);
     await supabase.from('bill_people').delete().eq('bill_id', billId);
@@ -156,7 +153,6 @@ export async function saveBill(state: BillState) {
     billId = data.id;
   }
 
-  // people
   const peopleRows = state.people.map((p) => ({
     legacy_id: p.id,
     bill_id: billId,
@@ -177,7 +173,6 @@ export async function saveBill(state: BillState) {
     (insertedPeople || []).map((p: any) => [p.legacy_id, p.id])
   );
 
-  // items
   const itemRows = state.items.map((item) => ({
     legacy_id: item.id,
     bill_id: billId,
@@ -202,7 +197,6 @@ export async function saveBill(state: BillState) {
     (insertedItems || []).map((i: any) => [i.legacy_id, i.id])
   );
 
-  // participants
   const participantRows = state.items
     .flatMap((item) =>
       (item.participantIds || []).map((personId) => ({

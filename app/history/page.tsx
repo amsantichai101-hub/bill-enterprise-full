@@ -4,6 +4,14 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { getBills } from '@/lib/repo';
 
+const statusLabels: Record<string, string> = {
+  draft: 'ร่าง / กำลังทำ',
+  calculated: 'คิดเงินแล้ว',
+  sent: 'ส่งบิลแล้ว',
+  pending: 'รอเก็บเงิน',
+  paid: 'เก็บเงินเรียบร้อยแล้ว',
+};
+
 export default function HistoryPage() {
   const [items, setItems] = useState<any[]>([]);
   const [error, setError] = useState('');
@@ -48,21 +56,30 @@ export default function HistoryPage() {
             </div>
           )}
 
-          {items.map((item) => (
-            <div className="list-card card" key={item.id}>
-              <div className="list-info">
-                <h4>{item.name || 'ไม่ระบุชื่อรายการ'}</h4>
-                <p className="muted">วันที่รายการ: {item.event_date || '-'}</p>
-                <p className="muted">
-                  บันทึกเมื่อ: {new Date(item.created_at).toLocaleString('th-TH')}
-                </p>
-              </div>
+          {items.map((item) => {
+            // อ่านค่าจากคอลัมน์ใหม่ที่เราพึ่งสร้าง หรือ Fallback จาก JSON Data
+            const status = item.status || item.data?.status || 'draft';
+            const owner = item.owner_name || item.data?.ownerName || '-';
 
-              <Link className="btn primary" href={`/bill/${item.id}`}>
-                <span>ดูรายละเอียด</span>
-              </Link>
-            </div>
-          ))}
+            return (
+              <div className="list-card card" key={item.id}>
+                <div className="list-info">
+                  <h4>{item.name || 'ไม่ระบุชื่อรายการ'}</h4>
+                  <p className="muted">วันที่รายการ: {item.event_date || '-'}</p>
+                  <p className="muted">
+                    เจ้าของบิล: {owner} • สถานะ: <strong>{statusLabels[status] || status}</strong>
+                  </p>
+                  <p className="muted">
+                    บันทึกเมื่อ: {new Date(item.created_at).toLocaleString('th-TH')}
+                  </p>
+                </div>
+
+                <Link className="btn primary" href={`/bill/${item.id}`}>
+                  <span>ดูรายละเอียด</span>
+                </Link>
+              </div>
+            );
+          })}
         </section>
       </div>
     </main>
