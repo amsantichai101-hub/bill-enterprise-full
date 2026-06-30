@@ -6,6 +6,7 @@ import { calculateBill, getNetItemTotal } from '@/lib/calc';
 import { saveBill } from '@/lib/repo';
 import { BillState, Category, DrinkTier, Item, Person, SplitMode, BillStatus } from '@/lib/types';
 import { clone, fmt, uid } from '@/lib/utils';
+import ShareButton from './ShareButton';
 
 const categories: Category[] = ['food', 'drink', 'mixer', 'shared', 'personal'];
 const splitModes: SplitMode[] = ['all', 'selected', 'owner', 'weighted-tier', 'none'];
@@ -150,7 +151,6 @@ function dataUrlToImage(dataUrl: string): Promise<HTMLImageElement> {
   });
 }
 
-// ฟังก์ชันสำหรับดึงรูปภาพจากลิงก์นอกมาวาดโดยไม่ติดปัญหาเรื่องความปลอดภัย Canvas
 async function safeLoadImage(url: string): Promise<HTMLImageElement | null> {
   try {
     const res = await fetch(url);
@@ -204,9 +204,11 @@ function wrapText(
 export default function BillEditor({
   initialState,
   mode = 'create',
+  isReadOnly = false, // ค่าเริ่มต้นคือแก้ไขได้
 }: {
   initialState?: BillState;
   mode?: 'create' | 'edit';
+  isReadOnly?: boolean;
 }) {
   const [state, setState] = useState<BillState>(clone(initialState || demoState));
   const [saving, setSaving] = useState(false);
@@ -306,7 +308,6 @@ export default function BillEditor({
     setMessage('ส่งออก JSON เรียบร้อยแล้ว');
   };
 
-  // --- แบบที่ 1: ส่งออกรูป (สรุป) ---
   const onExportSummaryImage = async () => {
     try {
       setExportingImage(true);
@@ -426,7 +427,6 @@ export default function BillEditor({
       ctx.fillText('ข้อมูลเพิ่มเติม', padding, footerY);
       footerY += 20;
 
-      // เพิ่ม QR โค้ดส่วนกลาง (หากมีเลขพร้อมเพย์)
       if (state.promptPayNumber) {
         ctx.fillStyle = '#64748b';
         ctx.font = '400 18px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Arial, sans-serif';
@@ -444,7 +444,6 @@ export default function BillEditor({
         footerY += 250;
       }
 
-      // วาดรูปอ้างอิง
       if (state.attachedImage) {
         ctx.fillStyle = '#64748b';
         ctx.font = '400 18px -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Arial, sans-serif';
@@ -475,7 +474,6 @@ export default function BillEditor({
     }
   };
 
-  // --- แบบที่ 2: ส่งออกรูป (ละเอียด + QR รายบุคคล) ---
   const onExportDetailedImage = async () => {
     try {
       setExportingImage(true);
@@ -674,61 +672,71 @@ export default function BillEditor({
         <div className="hero card">
           <div className="hero-content">
             <div className="eyebrow">Bill Pro Final</div>
-            <h1>{mode === 'create' ? 'ระบบจัดการบิล' : 'แก้ไขบิล'}</h1>
+            <h1>{isReadOnly ? 'รายละเอียดบิล' : (mode === 'create' ? 'ระบบจัดการบิล' : 'แก้ไขบิล')}</h1>
             <p>
-              {mode === 'create'
-                ? 'กรอกข้อมูล คำนวณค่าใช้จ่าย และส่งออกผลลัพธ์เพื่อแชร์ได้ในหน้าเดียว'
-                : 'แก้ไขข้อมูลเดิม พร้อมสร้างบิลรอบใหม่หรือส่งออกผลลัพธ์ได้ทันที'}
+              {isReadOnly 
+                ? 'คุณกำลังอยู่ในโหมดเรียกดูข้อมูลเท่านั้น สามารถดูรายละเอียดและสแกน QR เพื่อจ่ายได้เลย' 
+                : (mode === 'create'
+                  ? 'กรอกข้อมูล คำนวณค่าใช้จ่าย และส่งออกผลลัพธ์เพื่อแชร์ได้ในหน้าเดียว'
+                  : 'แก้ไขข้อมูลเดิม พร้อมสร้างบิลรอบใหม่หรือส่งออกผลลัพธ์ได้ทันที')}
             </p>
           </div>
 
           <div className="actions-row actions-row-mobile desktop-only">
-            <button className="btn secondary" onClick={onClearAll} type="button">เคลียร์ทั้งหมด</button>
-            <button className="btn secondary" onClick={onRollForward} type="button">Roll Forward</button>
+            {!isReadOnly && <button className="btn secondary" onClick={onClearAll} type="button">เคลียร์ทั้งหมด</button>}
+            {!isReadOnly && <button className="btn secondary" onClick={onRollForward} type="button">Roll Forward</button>}
             <button className="btn secondary" onClick={onExportSummaryImage} type="button" disabled={exportingImage}>
               {exportingImage ? '...' : 'ส่งออก (สรุป)'}
             </button>
             <button className="btn secondary" onClick={onExportDetailedImage} type="button" disabled={exportingImage}>
               {exportingImage ? '...' : 'ส่งออก (ละเอียด+QR)'}
             </button>
-            <button className="btn primary" onClick={onSave} disabled={saving} type="button">
-              {saving ? 'กำลังบันทึก...' : mode === 'create' ? 'บันทึกบิล' : 'อัปเดตบิล'}
-            </button>
+            {/* โชว์ปุ่มแชร์เฉพาะตอนแก้ไขที่มี ID แล้ว */}
+            {!isReadOnly && state.id && <ShareButton billId={state.id} />}
+            {!isReadOnly && (
+              <button className="btn primary" onClick={onSave} disabled={saving} type="button">
+                {saving ? 'กำลังบันทึก...' : mode === 'create' ? 'บันทึกบิล' : 'อัปเดตบิล'}
+              </button>
+            )}
+            
           </div>
         </div>
 
-        <section className="card block tools-panel">
-          <div className="section-title-row">
-            <h3>เครื่องมือเพิ่มเติม</h3>
-          </div>
-
-          <div className="tools-grid">
-            <button className="btn secondary" type="button" onClick={onImportJsonClick}>Import JSON</button>
-            <button className="btn secondary" type="button" onClick={onExportJson}>Export JSON</button>
-            <button className="btn secondary" type="button" onClick={onAttachImageClick}>แนบรูปประกอบอ้างอิง</button>
-            <button
-              className="btn secondary"
-              type="button"
-              onClick={() => { setState((prev) => ({ ...prev, attachedImage: '' })); setMessage('ลบรูปประกอบแล้ว'); }}
-              disabled={!state.attachedImage}
-            >
-              ลบรูปแนบ
-            </button>
-          </div>
-
-          <input ref={importJsonRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => onImportJson(e.target.files?.[0])} />
-          <input ref={attachImageRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onAttachImage(e.target.files?.[0])} />
-
-          {state.attachedImage ? (
-            <div className="attached-preview">
-              <div className="attached-preview-text">
-                <strong>รูปประกอบที่แนบไว้</strong>
-                <span>ระบบจะนำรูปนี้ไปวางในส่วนท้ายของไฟล์รูปภาพที่ส่งออก</span>
-              </div>
-              <img src={state.attachedImage} alt="Attached share image" className="attached-preview-img" />
+        {/* ซ่อนแถบเครื่องมือเพิ่มเติมถ้าเป็นโหมด View */}
+        {!isReadOnly && (
+          <section className="card block tools-panel">
+            <div className="section-title-row">
+              <h3>เครื่องมือเพิ่มเติม</h3>
             </div>
-          ) : null}
-        </section>
+
+            <div className="tools-grid">
+              <button className="btn secondary" type="button" onClick={onImportJsonClick}>Import JSON</button>
+              <button className="btn secondary" type="button" onClick={onExportJson}>Export JSON</button>
+              <button className="btn secondary" type="button" onClick={onAttachImageClick}>แนบรูปประกอบอ้างอิง</button>
+              <button
+                className="btn secondary"
+                type="button"
+                onClick={() => { setState((prev) => ({ ...prev, attachedImage: '' })); setMessage('ลบรูปประกอบแล้ว'); }}
+                disabled={!state.attachedImage}
+              >
+                ลบรูปแนบ
+              </button>
+            </div>
+
+            <input ref={importJsonRef} type="file" accept=".json,application/json" style={{ display: 'none' }} onChange={(e) => onImportJson(e.target.files?.[0])} />
+            <input ref={attachImageRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => onAttachImage(e.target.files?.[0])} />
+
+            {state.attachedImage ? (
+              <div className="attached-preview">
+                <div className="attached-preview-text">
+                  <strong>รูปประกอบที่แนบไว้</strong>
+                  <span>ระบบจะนำรูปนี้ไปวางในส่วนท้ายของไฟล์รูปภาพที่ส่งออก</span>
+                </div>
+                <img src={state.attachedImage} alt="Attached share image" className="attached-preview-img" />
+              </div>
+            ) : null}
+          </section>
+        )}
 
         <div className="grid-top">
           <div className="card block">
@@ -737,51 +745,51 @@ export default function BillEditor({
             <div className="grid-form-2">
               <label>
                 <span>ชื่อบิล</span>
-                <input value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} />
+                <input disabled={isReadOnly} value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} />
               </label>
 
               <label>
                 <span>วันที่</span>
-                <input type="date" value={state.eventDate || ''} onChange={(e) => setState({ ...state, eventDate: e.target.value })} />
+                <input disabled={isReadOnly} type="date" value={state.eventDate || ''} onChange={(e) => setState({ ...state, eventDate: e.target.value })} />
               </label>
               
               <label>
                 <span>เจ้าของบิล (คนเก็บเงิน)</span>
-                <input value={state.ownerName || ''} onChange={(e) => setState({ ...state, ownerName: e.target.value })} placeholder="ตัวอย่าง: กอล์ฟ" />
+                <input disabled={isReadOnly} value={state.ownerName || ''} onChange={(e) => setState({ ...state, ownerName: e.target.value })} placeholder="ตัวอย่าง: กอล์ฟ" />
               </label>
 
               <label>
                 <span>สถานะบิล</span>
-                <select value={state.status || 'draft'} onChange={(e) => setState({ ...state, status: e.target.value as BillStatus })}>
+                <select disabled={isReadOnly} value={state.status || 'draft'} onChange={(e) => setState({ ...state, status: e.target.value as BillStatus })}>
                   {billStatuses.map((s) => ( <option key={s} value={s}>{statusLabels[s]}</option> ))}
                 </select>
               </label>
 
               <label>
                 <span>หมายเลขพร้อมเพย์ (PromptPay)</span>
-                <input value={state.promptPayNumber || ''} onChange={(e) => setState({ ...state, promptPayNumber: e.target.value })} placeholder="เบอร์โทรศัพท์ หรือ เลขบัตรประชาชน" />
+                <input disabled={isReadOnly} value={state.promptPayNumber || ''} onChange={(e) => setState({ ...state, promptPayNumber: e.target.value })} placeholder="เบอร์โทรศัพท์ หรือ เลขบัตรประชาชน" />
               </label>
               
               <div></div>
 
               <label>
                 <span>ภาษี (%)</span>
-                <input type="number" value={state.settings.taxPercent} onChange={(e) => setState({ ...state, settings: { ...state.settings, taxPercent: Number(e.target.value) } }) } />
+                <input disabled={isReadOnly} type="number" value={state.settings.taxPercent} onChange={(e) => setState({ ...state, settings: { ...state.settings, taxPercent: Number(e.target.value) } }) } />
               </label>
 
               <label>
                 <span>Service Charge (%)</span>
-                <input type="number" value={state.settings.servicePercent} onChange={(e) => setState({ ...state, settings: { ...state.settings, servicePercent: Number(e.target.value) } }) } />
+                <input disabled={isReadOnly} type="number" value={state.settings.servicePercent} onChange={(e) => setState({ ...state, settings: { ...state.settings, servicePercent: Number(e.target.value) } }) } />
               </label>
 
               <label>
                 <span>ส่วนลดรวม</span>
-                <input type="number" value={state.settings.overallDiscount} onChange={(e) => setState({ ...state, settings: { ...state.settings, overallDiscount: Number(e.target.value) } }) } />
+                <input disabled={isReadOnly} type="number" value={state.settings.overallDiscount} onChange={(e) => setState({ ...state, settings: { ...state.settings, overallDiscount: Number(e.target.value) } }) } />
               </label>
 
               <label>
                 <span>กองกลางเพิ่มเติม</span>
-                <input type="number" value={state.settings.sharedPool} onChange={(e) => setState({ ...state, settings: { ...state.settings, sharedPool: Number(e.target.value) } }) } />
+                <input disabled={isReadOnly} type="number" value={state.settings.sharedPool} onChange={(e) => setState({ ...state, settings: { ...state.settings, sharedPool: Number(e.target.value) } }) } />
               </label>
             </div>
 
@@ -803,7 +811,7 @@ export default function BillEditor({
           <section className="card block">
             <div className="section-title-row">
               <h3>รายการคน</h3>
-              <button className="btn small" onClick={() => setState((prev) => ({ ...prev, people: [...prev.people, emptyPerson()] }))} type="button">+ เพิ่มคน</button>
+              {!isReadOnly && <button className="btn small" onClick={() => setState((prev) => ({ ...prev, people: [...prev.people, emptyPerson()] }))} type="button">+ เพิ่มคน</button>}
             </div>
 
             <div className="table-wrap desktop-only">
@@ -814,27 +822,29 @@ export default function BillEditor({
                     <th>ระดับ</th>
                     <th>ใช้งาน</th>
                     <th>หมายเหตุ</th>
-                    <th></th>
+                    {!isReadOnly && <th></th>}
                   </tr>
                 </thead>
                 <tbody>
                   {state.people.map((person) => (
                     <tr key={person.id}>
-                      <td><input value={person.name} onChange={(e) => updatePerson(person.id, { name: e.target.value })} /></td>
+                      <td><input disabled={isReadOnly} value={person.name} onChange={(e) => updatePerson(person.id, { name: e.target.value })} /></td>
                       <td>
-                        <select value={person.drinkTier} onChange={(e) => updatePerson(person.id, { drinkTier: e.target.value as DrinkTier }) }>
+                        <select disabled={isReadOnly} value={person.drinkTier} onChange={(e) => updatePerson(person.id, { drinkTier: e.target.value as DrinkTier }) }>
                           {drinkTiers.map((tier) => ( <option key={tier} value={tier}>{drinkTierLabels[tier]}</option> ))}
                         </select>
                       </td>
                       <td>
                         <div className="check-center">
-                          <input type="checkbox" checked={person.active} onChange={(e) => updatePerson(person.id, { active: e.target.checked }) } />
+                          <input disabled={isReadOnly} type="checkbox" checked={person.active} onChange={(e) => updatePerson(person.id, { active: e.target.checked }) } />
                         </div>
                       </td>
-                      <td><input value={person.note || ''} onChange={(e) => updatePerson(person.id, { note: e.target.value })} /></td>
-                      <td>
-                        <button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, people: prev.people.filter((p) => p.id !== person.id) })) } type="button">ลบ</button>
-                      </td>
+                      <td><input disabled={isReadOnly} value={person.note || ''} onChange={(e) => updatePerson(person.id, { note: e.target.value })} /></td>
+                      {!isReadOnly && (
+                        <td>
+                          <button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, people: prev.people.filter((p) => p.id !== person.id) })) } type="button">ลบ</button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -854,21 +864,21 @@ export default function BillEditor({
 
                   <div className="mobile-card-head">
                     <h4>ข้อมูลผู้ร่วมรายการ</h4>
-                    <button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, people: prev.people.filter((p) => p.id !== person.id) })) } type="button">ลบ</button>
+                    {!isReadOnly && <button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, people: prev.people.filter((p) => p.id !== person.id) })) } type="button">ลบ</button>}
                   </div>
 
                   <div className="mobile-form-grid">
-                    <label><span>ชื่อ</span><input value={person.name} onChange={(e) => updatePerson(person.id, { name: e.target.value })} /></label>
+                    <label><span>ชื่อ</span><input disabled={isReadOnly} value={person.name} onChange={(e) => updatePerson(person.id, { name: e.target.value })} /></label>
                     <label>
                       <span>ระดับการดื่ม</span>
-                      <select value={person.drinkTier} onChange={(e) => updatePerson(person.id, { drinkTier: e.target.value as DrinkTier }) }>
+                      <select disabled={isReadOnly} value={person.drinkTier} onChange={(e) => updatePerson(person.id, { drinkTier: e.target.value as DrinkTier }) }>
                         {drinkTiers.map((tier) => ( <option key={tier} value={tier}>{drinkTierLabels[tier]}</option> ))}
                       </select>
                     </label>
-                    <label><span>หมายเหตุ</span><input value={person.note || ''} onChange={(e) => updatePerson(person.id, { note: e.target.value })} /></label>
+                    <label><span>หมายเหตุ</span><input disabled={isReadOnly} value={person.note || ''} onChange={(e) => updatePerson(person.id, { note: e.target.value })} /></label>
                     <label className="mobile-checkbox-row">
                       <span>ใช้งานอยู่</span>
-                      <input type="checkbox" checked={person.active} onChange={(e) => updatePerson(person.id, { active: e.target.checked }) } />
+                      <input disabled={isReadOnly} type="checkbox" checked={person.active} onChange={(e) => updatePerson(person.id, { active: e.target.checked }) } />
                     </label>
                   </div>
                 </details>
@@ -907,7 +917,7 @@ export default function BillEditor({
         <section className="card block">
           <div className="section-title-row">
             <h3>รายการบิล</h3>
-            <button className="btn small" onClick={() => setState((prev) => ({ ...prev, items: [...prev.items, emptyItem()] })) } type="button">+ เพิ่มรายการ</button>
+            {!isReadOnly && <button className="btn small" onClick={() => setState((prev) => ({ ...prev, items: [...prev.items, emptyItem()] })) } type="button">+ เพิ่มรายการ</button>}
           </div>
 
           <div className="table-wrap desktop-only">
@@ -922,36 +932,36 @@ export default function BillEditor({
                   <th>การคำนวณ</th>
                   <th>คนที่เกี่ยวข้อง</th>
                   <th>สุทธิ</th>
-                  <th></th>
+                  {!isReadOnly && <th></th>}
                 </tr>
               </thead>
               <tbody>
                 {state.items.map((item) => (
                   <tr key={item.id}>
-                    <td><input value={item.name} onChange={(e) => updateItem(item.id, { name: e.target.value })} /></td>
+                    <td><input disabled={isReadOnly} value={item.name} onChange={(e) => updateItem(item.id, { name: e.target.value })} /></td>
                     <td>
-                      <select value={item.category} onChange={(e) => updateItem(item.id, { category: e.target.value as Category }) }>
+                      <select disabled={isReadOnly} value={item.category} onChange={(e) => updateItem(item.id, { category: e.target.value as Category }) }>
                         {categories.map((cat) => ( <option key={cat} value={cat}>{categoryLabels[cat]}</option> ))}
                       </select>
                     </td>
-                    <td><input type="number" value={item.qty} onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })} /></td>
-                    <td><input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, { unitPrice: Number(e.target.value) }) } /></td>
-                    <td><input type="number" value={item.discountPercent} onChange={(e) => updateItem(item.id, { discountPercent: Number(e.target.value) }) } /></td>
+                    <td><input disabled={isReadOnly} type="number" value={item.qty} onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })} /></td>
+                    <td><input disabled={isReadOnly} type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, { unitPrice: Number(e.target.value) }) } /></td>
+                    <td><input disabled={isReadOnly} type="number" value={item.discountPercent} onChange={(e) => updateItem(item.id, { discountPercent: Number(e.target.value) }) } /></td>
                     <td>
-                      <select value={item.splitMode} onChange={(e) => updateItem(item.id, { splitMode: e.target.value as SplitMode }) }>
+                      <select disabled={isReadOnly} value={item.splitMode} onChange={(e) => updateItem(item.id, { splitMode: e.target.value as SplitMode }) }>
                         {splitModes.map((modeValue) => ( <option key={modeValue} value={modeValue}>{splitModeLabels[modeValue]}</option> ))}
                       </select>
                     </td>
                     <td>
                       {item.splitMode === 'owner' ? (
-                        <select value={item.ownerId || ''} onChange={(e) => updateItem(item.id, { ownerId: e.target.value })}>
+                        <select disabled={isReadOnly} value={item.ownerId || ''} onChange={(e) => updateItem(item.id, { ownerId: e.target.value })}>
                           <option value="">-- owner --</option>
                           {state.people.map((p) => ( <option key={p.id} value={p.id}>{p.name || 'ไม่มีชื่อ'}</option> ))}
                         </select>
                       ) : item.splitMode === 'selected' ? (
                         <div className="chips">
                           {state.people.map((p) => (
-                            <button type="button" key={p.id} className={`chip ${item.participantIds.includes(p.id) ? 'chip-on' : ''}`} onClick={() => updateItem(item.id, { participantIds: item.participantIds.includes(p.id) ? item.participantIds.filter((id) => id !== p.id) : [...item.participantIds, p.id], }) }>
+                            <button disabled={isReadOnly} type="button" key={p.id} className={`chip ${item.participantIds.includes(p.id) ? 'chip-on' : ''}`} onClick={() => updateItem(item.id, { participantIds: item.participantIds.includes(p.id) ? item.participantIds.filter((id) => id !== p.id) : [...item.participantIds, p.id], }) }>
                               {p.name || 'ไม่มีชื่อ'}
                             </button>
                           ))}
@@ -959,7 +969,7 @@ export default function BillEditor({
                       ) : item.splitMode === 'weighted-tier' ? ( <span className="muted">ใช้ระดับอัตโนมัติ</span> ) : ( <span className="muted">ไม่ต้องเลือก</span> )}
                     </td>
                     <td>{fmt(getNetItemTotal(item.qty, item.unitPrice, item.discountPercent))}</td>
-                    <td><button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, items: prev.items.filter((x) => x.id !== item.id) })) } type="button">ลบ</button></td>
+                    {!isReadOnly && <td><button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, items: prev.items.filter((x) => x.id !== item.id) })) } type="button">ลบ</button></td>}
                   </tr>
                 ))}
               </tbody>
@@ -979,31 +989,31 @@ export default function BillEditor({
 
                 <div className="mobile-card-head">
                   <h4>ข้อมูลรายการ</h4>
-                  <button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, items: prev.items.filter((x) => x.id !== item.id) })) } type="button">ลบ</button>
+                  {!isReadOnly && <button className="icon-btn" onClick={() => setState((prev) => ({ ...prev, items: prev.items.filter((x) => x.id !== item.id) })) } type="button">ลบ</button>}
                 </div>
 
                 <div className="mobile-form-grid">
-                  <label><span>ชื่อรายการ</span><input value={item.name} onChange={(e) => updateItem(item.id, { name: e.target.value })} /></label>
+                  <label><span>ชื่อรายการ</span><input disabled={isReadOnly} value={item.name} onChange={(e) => updateItem(item.id, { name: e.target.value })} /></label>
                   <label>
                     <span>หมวด</span>
-                    <select value={item.category} onChange={(e) => updateItem(item.id, { category: e.target.value as Category }) }>
+                    <select disabled={isReadOnly} value={item.category} onChange={(e) => updateItem(item.id, { category: e.target.value as Category }) }>
                       {categories.map((cat) => ( <option key={cat} value={cat}>{categoryLabels[cat]}</option> ))}
                     </select>
                   </label>
 
                   <div className="mobile-inline-2">
-                    <label><span>จำนวน</span><input type="number" value={item.qty} onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })} /></label>
-                    <label><span>ราคา</span><input type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, { unitPrice: Number(e.target.value) }) } /></label>
+                    <label><span>จำนวน</span><input disabled={isReadOnly} type="number" value={item.qty} onChange={(e) => updateItem(item.id, { qty: Number(e.target.value) })} /></label>
+                    <label><span>ราคา</span><input disabled={isReadOnly} type="number" value={item.unitPrice} onChange={(e) => updateItem(item.id, { unitPrice: Number(e.target.value) }) } /></label>
                   </div>
 
                   <div className="mobile-inline-2">
-                    <label><span>ส่วนลด (%)</span><input type="number" value={item.discountPercent} onChange={(e) => updateItem(item.id, { discountPercent: Number(e.target.value) }) } /></label>
+                    <label><span>ส่วนลด (%)</span><input disabled={isReadOnly} type="number" value={item.discountPercent} onChange={(e) => updateItem(item.id, { discountPercent: Number(e.target.value) }) } /></label>
                     <label><span>ยอดสุทธิ</span><input value={fmt(getNetItemTotal(item.qty, item.unitPrice, item.discountPercent))} readOnly /></label>
                   </div>
 
                   <label>
                     <span>รูปแบบการคำนวณ</span>
-                    <select value={item.splitMode} onChange={(e) => updateItem(item.id, { splitMode: e.target.value as SplitMode }) }>
+                    <select disabled={isReadOnly} value={item.splitMode} onChange={(e) => updateItem(item.id, { splitMode: e.target.value as SplitMode }) }>
                       {splitModes.map((modeValue) => ( <option key={modeValue} value={modeValue}>{splitModeLabels[modeValue]}</option> ))}
                     </select>
                   </label>
@@ -1011,14 +1021,14 @@ export default function BillEditor({
                   <div className="mobile-extra-block">
                     <span className="mobile-block-title">ผู้ที่เกี่ยวข้อง</span>
                     {item.splitMode === 'owner' ? (
-                      <select value={item.ownerId || ''} onChange={(e) => updateItem(item.id, { ownerId: e.target.value })}>
+                      <select disabled={isReadOnly} value={item.ownerId || ''} onChange={(e) => updateItem(item.id, { ownerId: e.target.value })}>
                         <option value="">-- owner --</option>
                         {state.people.map((p) => ( <option key={p.id} value={p.id}>{p.name || 'ไม่มีชื่อ'}</option> ))}
                       </select>
                     ) : item.splitMode === 'selected' ? (
                       <div className="chips">
                         {state.people.map((p) => (
-                          <button type="button" key={p.id} className={`chip ${item.participantIds.includes(p.id) ? 'chip-on' : ''}`} onClick={() => updateItem(item.id, { participantIds: item.participantIds.includes(p.id) ? item.participantIds.filter((id) => id !== p.id) : [...item.participantIds, p.id], }) }>
+                          <button disabled={isReadOnly} type="button" key={p.id} className={`chip ${item.participantIds.includes(p.id) ? 'chip-on' : ''}`} onClick={() => updateItem(item.id, { participantIds: item.participantIds.includes(p.id) ? item.participantIds.filter((id) => id !== p.id) : [...item.participantIds, p.id], }) }>
                             {p.name || 'ไม่มีชื่อ'}
                           </button>
                         ))}
@@ -1031,7 +1041,6 @@ export default function BillEditor({
           </div>
         </section>
 
-        {/* แถบเครื่องมือด้านล่าง จัด Grid ให้แสดงบนมือถือได้สวยงาม */}
         <div className="mobile-sticky-actions">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', width: '100%' }}>
             <button className="btn secondary" type="button" onClick={onExportSummaryImage} disabled={exportingImage} style={{ padding: '10px 4px', fontSize: '14px' }}>
@@ -1040,9 +1049,19 @@ export default function BillEditor({
             <button className="btn secondary" type="button" onClick={onExportDetailedImage} disabled={exportingImage} style={{ padding: '10px 4px', fontSize: '14px' }}>
               {exportingImage ? 'รอสักครู่...' : 'รูป (ละเอียด+QR)'}
             </button>
-            <button className="btn primary" type="button" onClick={onSave} disabled={saving} style={{ gridColumn: 'span 2' }}>
-              {saving ? 'กำลังบันทึก...' : 'บันทึกข้อมูล'}
-            </button>
+            
+            {/* โชว์ปุ่มแชร์เฉพาะตอนที่บันทึกแล้วและไม่ใช่โหมด View */}
+            {!isReadOnly && state.id && (
+              <div style={{ gridColumn: 'span 2' }}>
+                <ShareButton billId={state.id} />
+              </div>
+            )}
+            
+            {!isReadOnly && (
+              <button className="btn primary" type="button" onClick={onSave} disabled={saving} style={{ gridColumn: 'span 2' }}>
+                {saving ? 'กำลังบันทึก...' : mode === 'create' ? 'บันทึกบิล' : 'อัปเดตบิล'}
+              </button>
+            )}
           </div>
         </div>
       </div>
